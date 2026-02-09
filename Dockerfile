@@ -1,56 +1,21 @@
-# Lunox Discord Music Bot
-# Multi-stage build for optimized production image
+# استخدام نسخة Debian عشان تدعم الجافا والنود بسهولة
+FROM node:20-bullseye
 
-# ================================
-# Stage 1: Dependencies
-# ================================
-FROM node:20-alpine AS dependencies
+# ١. تثبيت الجافا والأدوات اللازمة
+RUN apt-get update && apt-get install -y openjdk-17-jre-headless wget && apt-get clean
 
 WORKDIR /app
 
-# Install build dependencies for native modules
-RUN apk add --no-cache python3 make g++
+# ٢. تحميل ملف Lavalink v4
+RUN wget https://github.com/lavalink-devs/Lavalink/releases/download/4.0.8/Lavalink.jar
 
-# Copy package files
+# ٣. تثبيت المكتبات (نحن ولدنا الـ package-lock قبل كدة)
 COPY package*.json ./
+RUN npm install --omit=dev
 
-# Install production dependencies only
-RUN npm ci --only=production --ignore-scripts && \
-    npm cache clean --force
+# ٤. نسخ سورس البوت
+COPY . .
 
-# ================================
-# Stage 2: Production
-# ================================
-FROM node:20-alpine AS production
-
-# Set environment
-ENV NODE_ENV=production
-
-# Create non-root user for security
-RUN addgroup -g 1001 -S lunox && \
-    adduser -S lunox -u 1001
-
-WORKDIR /app
-
-# Copy dependencies from build stage
-COPY --from=dependencies /app/node_modules ./node_modules
-
-# Copy source code
-COPY --chown=lunox:lunox package*.json ./
-COPY --chown=lunox:lunox src ./src
-
-# Set proper permissions
-RUN chown -R lunox:lunox /app
-
-# Switch to non-root user
-USER lunox
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-    CMD node -e "console.log('healthy')" || exit 1
-
-# Expose no ports (bot connects outbound to Discord)
-# If you add a web dashboard later, expose the port here
-
-# Start the bot
-CMD ["node", "src/index.js"]
+# ٥. تشغيل اللافالينك والبوت سوا
+# عطينا اللافالينك 90 جيجا رام وسيبنا 10 جيجا للبوت
+CMD java -Xmx90G -jar Lavalink.jar & node src/index.js
